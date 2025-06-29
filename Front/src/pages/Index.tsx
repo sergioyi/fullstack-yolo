@@ -11,9 +11,10 @@ const Index = () => {
   const [listaDeteccao, setListaDeteccao] = useState([]);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleFileSelect = (file: File) => {
-    if (file.type === "application/pdf" || file.type.startsWith("image/")) {
+    if (file.type.startsWith("video/") || file.type.startsWith("image/")) {
       setSelectedFile(file);
       toast({
         title: "Arquivo selecionado",
@@ -22,7 +23,7 @@ const Index = () => {
     } else {
       toast({
         title: "Tipo de arquivo não suportado",
-        description: "Por favor, selecione um arquivo PDF ou imagem.",
+        description: "Por favor, selecione um arquivo de vídeo ou imagem.",
         variant: "destructive",
       });
     }
@@ -47,6 +48,16 @@ const Index = () => {
     }
   };
 
+  const handleCancel = () => {
+    setSelectedFile(null);
+    setIsDragging(false);
+    toast({
+      title: "Operação cancelada",
+      description: "O arquivo selecionado foi removido."
+    });
+  };
+
+
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -65,18 +76,35 @@ const Index = () => {
     }
 
     const formData = new FormData();
-    formData.append("image", selectedFile);
+    var endpoint: string;
+    if (selectedFile.type.startsWith("image/")) {
+      formData.append("image", selectedFile);
+      endpoint = "/upload";
+    }else{
+      formData.append("video", selectedFile);
+      endpoint = "/upload_video";
+    }
 
+    setIsLoading(true);
     try {
-      await fetch(`${(window as any).urlBackEnd}/upload`, {
+      await fetch(`${(window as any).urlBackEnd}${endpoint}`, {
         method: "POST",
         body: formData,
       })
-      .then((response) => response.json())
-      .then((result) => {
-        console.log(result.detected_class)
-        setListaDeteccao((prev) => [...prev, result.detected_class]);
-      })
+        .then((response) => {
+          setIsLoading(true);
+          return response.json();
+        })
+        .then((result) => {
+          const detectedClasses = result.detected_classes
+            ? result.detected_classes
+            : [result.detected_class];
+
+          setListaDeteccao((prev) => [...prev, ...detectedClasses]);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     } catch (error) {
       console.error("Erro ao fazer upload:", error);
 
@@ -118,7 +146,7 @@ const Index = () => {
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,image/*"
+                accept=".mp4,image/*"
                 onChange={handleFileInputChange}
               />
 
@@ -143,7 +171,7 @@ const Index = () => {
           <div className="flex space-x-4">
             <Button
               variant="outline"
-              //onClick={() => navigate("/login")}
+              onClick={handleCancel}
               className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               Cancel
@@ -160,8 +188,11 @@ const Index = () => {
       </div>
       <div className="overflow-y-auto w-full max-w-md space-y-8 bg-gray-50 p-8 rounded-md h-96 max-w-96">
         <div className="columns-1">
-          <div className="border border-gray-50 border-b-indigo-500 ">
+          <div className="relative">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Detecções</h3>
+            {isLoading && (
+              <div className="absolute bottom-0 left-0 h-1 w-full bg-indigo-500 animate-loading"></div>
+            )}
           </div>
             <div>
               {
